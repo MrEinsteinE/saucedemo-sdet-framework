@@ -82,53 +82,56 @@ public class CheckoutPage extends BasePage {
         return this;
     }
 
-        public CheckoutPage fillShippingInfo(String firstName, String lastName, String zip) {
+    public CheckoutPage fillShippingInfo(String firstName, String lastName, String zip) {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        
-        // Wait for first field and fill
+
         WebElement first = wait.until(ExpectedConditions.visibilityOf(firstNameField));
         first.clear();
         first.sendKeys(firstName);
-        
+
         lastNameField.clear();
         lastNameField.sendKeys(lastName);
-        
+
         postalCodeField.clear();
         postalCodeField.sendKeys(zip);
-        
+
         return this;
     }
 
+    /**
+     * Clicks Continue and waits for one of two outcomes:
+     *  - Navigation to step-two URL  (all fields valid)
+     *  - An error message appearing  (validation failure)
+     *
+     * Both branches return `this` so callers can chain assertions.
+     */
     public CheckoutPage clickContinue() {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        
-        // 1. Force a small pause for the JS to register field inputs
-        try { Thread.sleep(500); } catch (InterruptedException e) { }
 
-        // 2. Click Continue
         WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(continueButton));
         ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-        
-        // 3. SPECIAL CASE: If this is an 'Error' test, don't wait for the next URL
-        // Check if we are testing a failure scenario
-        return this; 
-    }
 
+        // Wait until either the URL advances to step 2 OR an error is shown.
+        // This prevents isOnCheckoutStep2() from evaluating before the page
+        // has had a chance to transition.
+        wait.until(ExpectedConditions.or(
+                ExpectedConditions.urlContains("checkout-step-two.html"),
+                ExpectedConditions.visibilityOfElementLocated(ERROR_LOCATOR)
+        ));
+
+        return this;
+    }
 
     public CheckoutPage clickFinish() {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        wait.until(ExpectedConditions.elementToBeClickable(finishButton));
-        
-        // Use JS click for the final transition as well
-        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", finishButton);
-        
+
+        // Wait for the finish button to be present and clickable (we must be on step 2)
+        WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(By.id("finish")));
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+
         wait.until(ExpectedConditions.urlContains("checkout-complete.html"));
         return this;
     }
-
-
-
-
 
     public CheckoutPage clickCancel() {
         cancelButton.click();
@@ -137,7 +140,7 @@ public class CheckoutPage extends BasePage {
 
     // ── Assertions / Getters ──────────────────────────────────────
 
-        public boolean isOnCheckoutStep1() {
+    public boolean isOnCheckoutStep1() {
         try {
             return new WebDriverWait(driver, Duration.ofSeconds(5))
                     .until(ExpectedConditions.urlContains("checkout-step-one.html"));
@@ -163,7 +166,6 @@ public class CheckoutPage extends BasePage {
             return false;
         }
     }
-
 
     public String getConfirmationHeader() {
         return confirmationHeader.getText();
