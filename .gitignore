@@ -1,0 +1,21 @@
+# Maven
+target/
+*.class
+
+# Test output (reports and screenshots are CI artifacts, not committed)
+test-output/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.classpath
+*.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WebDriverManager cache
+.wdm/

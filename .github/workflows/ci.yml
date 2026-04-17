@@ -1,0 +1,82 @@
+name: SDET Automation Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run regression suite every day at 02:00 UTC (nightly regression)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub UI
+    inputs:
+      test_group:
+        description: 'Test group to run (smoke / regression / e2e)'
+        required: false
+        default: 'regression'
+
+jobs:
+  test:
+    name: Run Selenium TestNG Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ────────────────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Java 11 ────────────────────────────────────────
+      - name: Set Up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # ── 3. Install Chrome (latest stable) ───────────────────────
+      - name: Install Google Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" \
+            | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update -q
+          sudo apt-get install -y google-chrome-stable
+          google-chrome --version
+
+      # ── 4. Run tests in headless mode ────────────────────────────
+      - name: Run Test Suite
+        env:
+          HEADLESS: "true"   # Picked up by BaseTest.createDriver()
+        run: |
+          TEST_GROUP="${{ github.event.inputs.test_group || 'regression' }}"
+          echo "Running test group: $TEST_GROUP"
+          mvn clean test -Dgroups="$TEST_GROUP" --no-transfer-progress
+
+      # ── 5. Upload HTML test report as artifact ───────────────────
+      - name: Upload Test Report
+        uses: actions/upload-artifact@v4
+        if: always()   # Upload even if tests fail
+        with:
+          name: extent-report-${{ github.run_number }}
+          path: test-output/reports/
+          retention-days: 30
+
+      # ── 6. Upload failure screenshots ────────────────────────────
+      - name: Upload Failure Screenshots
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failure-screenshots-${{ github.run_number }}
+          path: test-output/screenshots/
+          retention-days: 14
+
+      # ── 7. Publish test results summary ─────────────────────────
+      - name: Publish TestNG Results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: TestNG Results
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: false
