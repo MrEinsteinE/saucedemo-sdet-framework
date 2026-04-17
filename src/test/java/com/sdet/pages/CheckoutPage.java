@@ -37,9 +37,6 @@ public class CheckoutPage extends BasePage {
     @FindBy(className = "summary_total_label")
     private WebElement orderTotal;
 
-    @FindBy(className = "summary_tax_label")
-    private WebElement taxLabel;
-
     @FindBy(id = "finish")
     private WebElement finishButton;
 
@@ -50,13 +47,12 @@ public class CheckoutPage extends BasePage {
     @FindBy(className = "complete-header")
     private WebElement confirmationHeader;
 
-    @FindBy(className = "complete-text")
-    private WebElement confirmationText;
-
     @FindBy(id = "back-to-products")
     private WebElement backToProductsButton;
 
-    private static final By ERROR_LOCATOR = By.cssSelector("[data-test='error']");
+    private static final By ERROR_LOCATOR    = By.cssSelector("[data-test='error']");
+    private static final By CONTINUE_LOCATOR = By.id("continue");
+    private static final By FINISH_LOCATOR   = By.id("finish");
 
     public CheckoutPage(WebDriver driver) {
         super(driver);
@@ -82,59 +78,86 @@ public class CheckoutPage extends BasePage {
         return this;
     }
 
+    /**
+     * Fills the step-1 shipping form.
+     *
+     * Uses JavaScript value injection + a synthetic 'input'/'change' event
+     * after each sendKeys so that React controlled-component state is updated.
+     * Plain sendKeys alone is sometimes swallowed in headless Chrome when the
+     * driver's implicit-wait is non-zero, leaving fields empty when Continue
+     * is clicked.
+     */
     public CheckoutPage fillShippingInfo(String firstName, String lastName, String zip) {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("first-name")));
 
-        WebElement first = wait.until(ExpectedConditions.visibilityOf(firstNameField));
-        first.clear();
-        first.sendKeys(firstName);
-
-        lastNameField.clear();
-        lastNameField.sendKeys(lastName);
-
-        postalCodeField.clear();
-        postalCodeField.sendKeys(zip);
+        fillField(By.id("first-name"),  firstName);
+        fillField(By.id("last-name"),   lastName);
+        fillField(By.id("postal-code"), zip);
 
         return this;
     }
 
     /**
-     * Clicks Continue and waits for one of two outcomes:
-     *  - Navigation to step-two URL  (all fields valid)
-     *  - An error message appearing  (validation failure)
+     * Clears a field, types into it via sendKeys, then fires JS input/change
+     * events to ensure React's controlled-component state is in sync.
+     */
+    private void fillField(By locator, String value) {
+        WebElement el = driver.findElement(locator);
+        el.clear();
+        el.sendKeys(value);
+        ((JavascriptExecutor) driver).executeScript(
+            "var el = arguments[0];" +
+            "var setter = Object.getOwnPropertyDescriptor(" +
+            "    window.HTMLInputElement.prototype, 'value').set;" +
+            "setter.call(el, arguments[1]);" +
+            "el.dispatchEvent(new Event('input',  { bubbles: true }));" +
+            "el.dispatchEvent(new Event('change', { bubbles: true }));",
+            el, value
+        );
+    }
+
+    /**
+     * Clicks Continue and waits for one of two outcomes before returning:
+     *   (a) URL advances to checkout-step-two.html  — happy path
+     *   (b) A validation error banner becomes visible — negative tests
      *
-     * Both branches return `this` so callers can chain assertions.
+     * The implicit wait is set to zero during the or() poll so that
+     * visibilityOfElementLocated(ERROR_LOCATOR) fails fast when the error
+     * element is absent, instead of blocking for 10 s per poll cycle and
+     * never allowing the URL condition to win.
      */
     public CheckoutPage clickContinue() {
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
-        WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(continueButton));
-        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+        // Fresh By-locator click (avoids stale PageFactory proxy)
+        wait.until(ExpectedConditions.elementToBeClickable(CONTINUE_LOCATOR)).click();
 
-        // Wait until either the URL advances to step 2 OR an error is shown.
-        // This prevents isOnCheckoutStep2() from evaluating before the page
-        // has had a chance to transition.
-        wait.until(ExpectedConditions.or(
+        // Disable implicit wait while polling for absence/presence
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
+        try {
+            wait.until(ExpectedConditions.or(
                 ExpectedConditions.urlContains("checkout-step-two.html"),
                 ExpectedConditions.visibilityOfElementLocated(ERROR_LOCATOR)
-        ));
+            ));
+        } finally {
+            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+        }
 
         return this;
     }
 
     public CheckoutPage clickFinish() {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-
-        // Wait for the finish button to be present and clickable (we must be on step 2)
-        WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(By.id("finish")));
-        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-
+        wait.until(ExpectedConditions.elementToBeClickable(FINISH_LOCATOR)).click();
         wait.until(ExpectedConditions.urlContains("checkout-complete.html"));
         return this;
     }
 
     public CheckoutPage clickCancel() {
-        cancelButton.click();
+        new WebDriverWait(driver, Duration.ofSeconds(10))
+            .until(ExpectedConditions.elementToBeClickable(cancelButton))
+            .click();
         return this;
     }
 
@@ -176,10 +199,13 @@ public class CheckoutPage extends BasePage {
     }
 
     public boolean isErrorDisplayed() {
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
         try {
             return driver.findElement(ERROR_LOCATOR).isDisplayed();
         } catch (Exception e) {
             return false;
+        } finally {
+            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
         }
     }
 
