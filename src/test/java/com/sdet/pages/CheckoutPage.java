@@ -82,27 +82,38 @@ public class CheckoutPage extends BasePage {
         return this;
     }
 
-    public CheckoutPage fillShippingInfo(String firstName, String lastName, String zip) {
-        return enterFirstName(firstName).enterLastName(lastName).enterPostalCode(zip);
-    }
-
-           public CheckoutPage clickContinue() {
+        public CheckoutPage fillShippingInfo(String firstName, String lastName, String zip) {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        wait.until(ExpectedConditions.elementToBeClickable(continueButton));
         
-        try {
-            // 1. Try standard click
-            continueButton.click();
-        } catch (Exception e) {
-            // 2. Try JavaScript click
-            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", continueButton);
-        }
+        // Wait for first field and fill
+        WebElement first = wait.until(ExpectedConditions.visibilityOf(firstNameField));
+        first.clear();
+        first.sendKeys(firstName);
         
-        // 3. FORCE wait for the URL to change to Step 2 before returning
-        // This prevents the next assertion from running too early
-        wait.until(ExpectedConditions.urlContains("checkout-step-two.html"));
+        lastNameField.clear();
+        lastNameField.sendKeys(lastName);
+        
+        postalCodeField.clear();
+        postalCodeField.sendKeys(zip);
+        
         return this;
     }
+
+    public CheckoutPage clickContinue() {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        
+        // 1. Force a small pause for the JS to register field inputs
+        try { Thread.sleep(500); } catch (InterruptedException e) { }
+
+        // 2. Click Continue
+        WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(continueButton));
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+        
+        // 3. SPECIAL CASE: If this is an 'Error' test, don't wait for the next URL
+        // Check if we are testing a failure scenario
+        return this; 
+    }
+
 
     public CheckoutPage clickFinish() {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));

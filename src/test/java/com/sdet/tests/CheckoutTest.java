@@ -43,7 +43,7 @@ public class CheckoutTest extends BaseTest {
         // Fill shipping info and continue
         checkoutPage.fillShippingInfo("Einstein", "Ellandala", "500001");
         checkoutPage.clickContinue();
-        Assert.assertTrue(checkoutPage.isOnCheckoutStep2(), "Should be on checkout step 2");
+        Assert.assertTrue(checkoutPage.isOnCheckoutStep2(), "Should have moved to step 2");
 
         // Verify order total label is present
         Assert.assertFalse(checkoutPage.getOrderTotal().isBlank(), "Order total should not be blank");
