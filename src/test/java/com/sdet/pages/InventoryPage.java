@@ -58,49 +58,38 @@ public class InventoryPage extends BasePage {
     }
 
     public InventoryPage addItemsToCart(int count) {
-    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-    for (int i = 0; i < count; i++) {
-        // 1. Find all "Add to Cart" buttons
-        List<WebElement> buttons = driver.findElements(By.xpath("//button[text()='Add to cart']"));
-        if (buttons.isEmpty()) break;
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        for (int i = 0; i < count; i++) {
+            List<WebElement> buttons = driver.findElements(By.xpath("//button[text()='Add to cart']"));
+            if (buttons.isEmpty()) break;
 
-        WebElement target = buttons.get(0);
-        
-        // 2. Click using JS
-        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", target);
-        
-        // 3. CRITICAL: Wait for the clicked button to disappear or change text
-        // This ensures the backend registered the addition
-        int expectedCount = i + 1;
-        wait.until(ExpectedConditions.textToBePresentInElementLocated(
-            By.className("shopping_cart_badge"), String.valueOf(expectedCount)));
+            WebElement target = buttons.get(0);
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", target);
+
+            int expectedCount = i + 1;
+            wait.until(ExpectedConditions.textToBePresentInElementLocated(
+                By.className("shopping_cart_badge"), String.valueOf(expectedCount)));
+        }
+        return this;
     }
-    return this;
-}
-
-
-
 
     public InventoryPage addItemToCartByName(String productName) {
-    String dataTestId = "add-to-cart-" + productName.toLowerCase().replaceAll("\\s+", "-");
-    driver.findElement(By.id(dataTestId)).click(); // Most SauceDemo elements use ID for data-test
-    return this;
-}
-
+        String dataTestId = "add-to-cart-" + productName.toLowerCase().replaceAll("\\s+", "-");
+        driver.findElement(By.id(dataTestId)).click();
+        return this;
+    }
 
     public CartPage goToCart() {
-    new WebDriverWait(driver, Duration.ofSeconds(10))
-        .until(ExpectedConditions.elementToBeClickable(cartIcon));
-    
-    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", cartIcon);
-    
-    // Wait for URL to actually change to cart.html
-    new WebDriverWait(driver, Duration.ofSeconds(10))
-        .until(ExpectedConditions.urlContains("cart.html"));
-        
-    return new CartPage(driver);
-}
+        new WebDriverWait(driver, Duration.ofSeconds(10))
+            .until(ExpectedConditions.elementToBeClickable(cartIcon));
 
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", cartIcon);
+
+        new WebDriverWait(driver, Duration.ofSeconds(10))
+            .until(ExpectedConditions.urlContains("cart.html"));
+
+        return new CartPage(driver);
+    }
 
     public void openMenu() {
         menuButton.click();
@@ -108,8 +97,20 @@ public class InventoryPage extends BasePage {
 
     // ── Assertions / Getters ──────────────────────────────────────
 
+    /**
+     * Returns true when the current URL contains "inventory.html".
+     *
+     * Includes a short explicit wait (3 s) so that callers immediately after
+     * a navigation action (e.g. clicking Cancel on checkout step-2) don't
+     * race against the browser completing the page transition.
+     */
     public boolean isOnInventoryPage() {
-        return driver.getCurrentUrl().contains("inventory.html");
+        try {
+            return new WebDriverWait(driver, Duration.ofSeconds(3))
+                    .until(ExpectedConditions.urlContains("inventory.html"));
+        } catch (Exception e) {
+            return driver.getCurrentUrl().contains("inventory.html");
+        }
     }
 
     public String getPageHeaderText() {
@@ -133,13 +134,12 @@ public class InventoryPage extends BasePage {
     }
 
     public int getCartCount() {
-    List<WebElement> badges = driver.findElements(CART_BADGE);
-    if (badges.isEmpty()) {
-        return 0;
+        List<WebElement> badges = driver.findElements(CART_BADGE);
+        if (badges.isEmpty()) {
+            return 0;
+        }
+        return Integer.parseInt(badges.get(0).getText());
     }
-    return Integer.parseInt(badges.get(0).getText());
-}
-
 
     public boolean isCartBadgeDisplayed() {
         try {
