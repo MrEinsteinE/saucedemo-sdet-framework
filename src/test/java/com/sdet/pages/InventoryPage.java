@@ -1,6 +1,7 @@
 package com.sdet.pages;
 
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -57,27 +58,24 @@ public class InventoryPage extends BasePage {
     }
 
     public InventoryPage addItemsToCart(int count) {
-    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-    
     for (int i = 0; i < count; i++) {
-        // 1. Re-find the list of "Add to Cart" buttons every time
         List<WebElement> buttons = driver.findElements(ADD_TO_CART_BUTTONS);
-        
         if (buttons.isEmpty()) break;
 
-        // 2. Click the first available "Add" button
-        WebElement targetButton = buttons.get(0);
-        scrollIntoView(targetButton);
-        targetButton.click();
+        WebElement target = buttons.get(0);
         
-        // 3. CRITICAL: Wait for the cart badge to update before clicking the next item
-        // This ensures the DOM is stable and the item is actually registered
+        // Force the click using JavaScript
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", target);
+        
+        // Wait for the badge to update (sync point)
         int expectedCount = i + 1;
-        wait.until(ExpectedConditions.textToBePresentInElementLocated(
-            By.className("shopping_cart_badge"), String.valueOf(expectedCount)));
+        new WebDriverWait(driver, Duration.ofSeconds(10))
+            .until(ExpectedConditions.textToBePresentInElementLocated(
+                By.className("shopping_cart_badge"), String.valueOf(expectedCount)));
     }
     return this;
 }
+
 
 
     public InventoryPage addItemToCartByName(String productName) {
