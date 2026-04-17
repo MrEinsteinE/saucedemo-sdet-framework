@@ -87,16 +87,24 @@ public class CheckoutPage extends BasePage {
         return enterFirstName(firstName).enterLastName(lastName).enterPostalCode(zip);
     }
 
-            public CheckoutPage clickContinue() {
-        // Using wait from BasePage logic or manual wait
-        WaitUtils.waitForClickable(driver, By.id("continue")).click();
+        public CheckoutPage clickContinue() {
+        // Wait for the button to be ready
+        new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10))
+                .until(org.openqa.selenium.support.ui.ExpectedConditions.elementToBeClickable(continueButton));
+        
+        // Force click using JS to ensure the transition to Step 2 triggers
+        ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("arguments[0].click();", continueButton);
         return this;
     }
 
     public CheckoutPage clickFinish() {
-        WaitUtils.waitForClickable(driver, By.id("finish")).click();
+        new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10))
+                .until(org.openqa.selenium.support.ui.ExpectedConditions.elementToBeClickable(finishButton));
+        
+        ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("arguments[0].click();", finishButton);
         return this;
     }
+
 
 
 
