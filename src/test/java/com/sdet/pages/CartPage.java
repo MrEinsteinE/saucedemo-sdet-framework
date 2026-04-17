@@ -36,13 +36,14 @@ public class CartPage extends BasePage {
     }
 
     public CheckoutPage proceedToCheckout() {
-    // Wait for button and click
-    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-    WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(checkoutButton));
+    WebElement btn = new WebDriverWait(driver, Duration.ofSeconds(10))
+        .until(ExpectedConditions.elementToBeClickable(By.id("checkout")));
+    
     ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
     
     return new CheckoutPage(driver);
 }
+
 
 
 

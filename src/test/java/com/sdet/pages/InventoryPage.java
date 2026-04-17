@@ -89,9 +89,18 @@ public class InventoryPage extends BasePage {
 
 
     public CartPage goToCart() {
-        cartIcon.click();
-        return new CartPage(driver);
-    }
+    new WebDriverWait(driver, Duration.ofSeconds(10))
+        .until(ExpectedConditions.elementToBeClickable(cartIcon));
+    
+    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", cartIcon);
+    
+    // Wait for URL to actually change to cart.html
+    new WebDriverWait(driver, Duration.ofSeconds(10))
+        .until(ExpectedConditions.urlContains("cart.html"));
+        
+    return new CartPage(driver);
+}
+
 
     public void openMenu() {
         menuButton.click();

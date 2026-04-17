@@ -2,6 +2,7 @@ package com.sdet.pages;
 
 import java.time.Duration;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -86,14 +87,13 @@ public class CheckoutPage extends BasePage {
     }
 
         public CheckoutPage clickContinue() {
-        // Wait for the button to be ready
-        new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10))
-                .until(org.openqa.selenium.support.ui.ExpectedConditions.elementToBeClickable(continueButton));
+    new WebDriverWait(driver, Duration.ofSeconds(10))
+        .until(ExpectedConditions.elementToBeClickable(continueButton));
         
-        // Force click using JS to ensure the transition to Step 2 triggers
-        ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("arguments[0].click();", continueButton);
-        return this;
-    }
+    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", continueButton);
+    return this;
+}
+
 
     public CheckoutPage clickFinish() {
         new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10))
