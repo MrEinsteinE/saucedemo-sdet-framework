@@ -45,14 +45,25 @@ public class CartPage extends BasePage {
     }
 
     /**
-     * Clicks the Remove button for the first cart item and waits until that
-     * item disappears from the DOM.
+     * Removes the first item from the cart and waits until it is gone from
+     * the DOM before returning.
      *
-     * IMPORTANT: the driver-level implicit wait must be set to 0 before using
-     * numberOfElementsToBe(locator, 0).  If implicit wait is > 0, WebDriver
-     * waits up to that timeout for *any* element to appear before returning an
-     * empty list, so the explicit-wait condition can never observe "0 elements"
-     * and always times out.
+     * Two problems addressed here:
+     *
+     * 1. The remove button click must use JavaScript execution.  In headless
+     *    Chrome on CI, a plain Selenium .click() on the SauceDemo cart remove
+     *    button sometimes fails silently (no exception, but no DOM change),
+     *    possibly because the element is intercepted by an invisible overlay
+     *    that exists briefly after page load.  A JS click bypasses the
+     *    hit-testing layer and fires the React onClick handler directly.
+     *
+     * 2. The post-removal wait must run with implicit-wait = 0.
+     *    driver.findElements() with a non-zero implicit wait blocks for up to
+     *    implicit-wait milliseconds before returning an empty list, so
+     *    numberOfElementsToBe(locator, 0) can never observe "zero elements"
+     *    within its polling window — it always reports the stale count of 1
+     *    and times out.  Setting implicit-wait to 0 makes findElements()
+     *    return instantaneously with the actual current DOM count.
      */
     public CartPage removeFirstItem() {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
@@ -60,16 +71,15 @@ public class CartPage extends BasePage {
         // Snapshot count before removal
         int countBefore = driver.findElements(CART_ITEM).size();
 
-        // Click the first remove button
-        List<WebElement> removeButtons = wait.until(
-                ExpectedConditions.numberOfElementsToBeMoreThan(REMOVE_BUTTONS, 0));
-        removeButtons.get(0).click();
+        // Wait for at least one remove button, then JS-click the first one
+        WebElement removeBtn = wait.until(
+                ExpectedConditions.elementToBeClickable(REMOVE_BUTTONS));
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", removeBtn);
 
-        // Disable implicit wait so that "no cart_item elements" is detected
-        // immediately by the explicit wait, rather than blocking per-poll.
+        // Poll for DOM update with implicit-wait = 0 so findElements() is instant
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
         try {
-            wait.until(ExpectedConditions.numberOfElementsToBe(CART_ITEM, countBefore - 1));
+            wait.until(d -> d.findElements(CART_ITEM).size() < countBefore);
         } finally {
             driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
         }
@@ -82,8 +92,8 @@ public class CartPage extends BasePage {
     }
 
     /**
-     * Always queries live DOM — never uses the cached @FindBy proxy list —
-     * so the count is accurate immediately after a remove action.
+     * Always queries the live DOM — never the cached @FindBy proxy list —
+     * so the count is correct immediately after a remove action.
      */
     public int getCartItemCount() {
         return driver.findElements(CART_ITEM).size();

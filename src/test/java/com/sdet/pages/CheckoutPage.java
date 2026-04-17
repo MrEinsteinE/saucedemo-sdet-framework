@@ -2,7 +2,6 @@ package com.sdet.pages;
 
 import java.time.Duration;
 import org.openqa.selenium.By;
-import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -79,68 +78,75 @@ public class CheckoutPage extends BasePage {
     }
 
     /**
-     * Fills the step-1 shipping form.
+     * Fills the step-1 shipping form using plain sendKeys via fresh
+     * driver.findElement() lookups (bypasses any stale PageFactory proxy).
      *
-     * Uses JavaScript value injection + a synthetic 'input'/'change' event
-     * after each sendKeys so that React controlled-component state is updated.
-     * Plain sendKeys alone is sometimes swallowed in headless Chrome when the
-     * driver's implicit-wait is non-zero, leaving fields empty when Continue
-     * is clicked.
+     * No JavaScript injection — the nativeInputValueSetter approach
+     * corrupts React's internal form state when called with an empty string,
+     * causing the Continue button to silently no-op.
      */
     public CheckoutPage fillShippingInfo(String firstName, String lastName, String zip) {
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("first-name")));
+        // Wait for the form to be ready
+        new WebDriverWait(driver, Duration.ofSeconds(10))
+            .until(ExpectedConditions.visibilityOfElementLocated(By.id("first-name")));
 
-        fillField(By.id("first-name"),  firstName);
-        fillField(By.id("last-name"),   lastName);
-        fillField(By.id("postal-code"), zip);
+        WebElement fn = driver.findElement(By.id("first-name"));
+        fn.clear();
+        fn.sendKeys(firstName);
+
+        WebElement ln = driver.findElement(By.id("last-name"));
+        ln.clear();
+        ln.sendKeys(lastName);
+
+        WebElement pc = driver.findElement(By.id("postal-code"));
+        pc.clear();
+        pc.sendKeys(zip);
 
         return this;
     }
 
     /**
-     * Clears a field, types into it via sendKeys, then fires JS input/change
-     * events to ensure React's controlled-component state is in sync.
-     */
-    private void fillField(By locator, String value) {
-        WebElement el = driver.findElement(locator);
-        el.clear();
-        el.sendKeys(value);
-        ((JavascriptExecutor) driver).executeScript(
-            "var el = arguments[0];" +
-            "var setter = Object.getOwnPropertyDescriptor(" +
-            "    window.HTMLInputElement.prototype, 'value').set;" +
-            "setter.call(el, arguments[1]);" +
-            "el.dispatchEvent(new Event('input',  { bubbles: true }));" +
-            "el.dispatchEvent(new Event('change', { bubbles: true }));",
-            el, value
-        );
-    }
-
-    /**
-     * Clicks Continue and waits for one of two outcomes before returning:
-     *   (a) URL advances to checkout-step-two.html  — happy path
-     *   (b) A validation error banner becomes visible — negative tests
+     * Clicks Continue and blocks until one of two outcomes is observable:
      *
-     * The implicit wait is set to zero during the or() poll so that
-     * visibilityOfElementLocated(ERROR_LOCATOR) fails fast when the error
-     * element is absent, instead of blocking for 10 s per poll cycle and
-     * never allowing the URL condition to win.
+     *  (a) URL advances to checkout-step-two.html  — happy path
+     *  (b) The error element appears in the DOM     — validation failure
+     *
+     * Implementation uses a raw lambda (not ExpectedConditions.or) with the
+     * driver implicit-wait set to zero during polling.  This is necessary
+     * because:
+     *
+     *  • ExpectedConditions.visibilityOfElementLocated throws
+     *    NoSuchElementException when the element is absent; FluentWait
+     *    suppresses that and retries — but with implicit-wait > 0 each
+     *    driver.findElement() call already blocks for up to 10 s before
+     *    throwing, making the or() condition take 10 s per poll rather than
+     *    500 ms.
+     *
+     *  • driver.findElements() (plural) never throws; it returns an empty
+     *    list immediately when no elements match.  Setting implicit-wait = 0
+     *    makes it truly instantaneous so the polling loop runs every 500 ms
+     *    as intended.
      */
     public CheckoutPage clickContinue() {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
-        // Fresh By-locator click (avoids stale PageFactory proxy)
+        // Fresh By-locator click avoids stale PageFactory proxy
         wait.until(ExpectedConditions.elementToBeClickable(CONTINUE_LOCATOR)).click();
 
-        // Disable implicit wait while polling for absence/presence
+        // Temporarily disable implicit wait so findElements() is non-blocking
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
         try {
-            wait.until(ExpectedConditions.or(
-                ExpectedConditions.urlContains("checkout-step-two.html"),
-                ExpectedConditions.visibilityOfElementLocated(ERROR_LOCATOR)
-            ));
+            wait.until(d -> {
+                // Condition (a): navigation succeeded
+                if (d.getCurrentUrl().contains("checkout-step-two.html")) {
+                    return true;
+                }
+                // Condition (b): validation error is present in DOM
+                // findElements() returns [] immediately when nothing matches
+                return !d.findElements(ERROR_LOCATOR).isEmpty();
+            });
         } finally {
+            // Always restore the suite-wide implicit wait
             driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
         }
 
@@ -198,10 +204,15 @@ public class CheckoutPage extends BasePage {
         return orderTotal.getText();
     }
 
+    /**
+     * Checks error visibility without implicit-wait interference.
+     * findElements() with implicit=0 returns [] immediately if absent.
+     */
     public boolean isErrorDisplayed() {
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
         try {
-            return driver.findElement(ERROR_LOCATOR).isDisplayed();
+            return !driver.findElements(ERROR_LOCATOR).isEmpty()
+                    && driver.findElement(ERROR_LOCATOR).isDisplayed();
         } catch (Exception e) {
             return false;
         } finally {
