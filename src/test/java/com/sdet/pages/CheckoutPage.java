@@ -86,22 +86,35 @@ public class CheckoutPage extends BasePage {
         return enterFirstName(firstName).enterLastName(lastName).enterPostalCode(zip);
     }
 
-        public CheckoutPage clickContinue() {
-    new WebDriverWait(driver, Duration.ofSeconds(10))
-        .until(ExpectedConditions.elementToBeClickable(continueButton));
+           public CheckoutPage clickContinue() {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        wait.until(ExpectedConditions.elementToBeClickable(continueButton));
         
-    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", continueButton);
-    return this;
-}
-
-
-    public CheckoutPage clickFinish() {
-        new org.openqa.selenium.support.ui.WebDriverWait(driver, java.time.Duration.ofSeconds(10))
-                .until(org.openqa.selenium.support.ui.ExpectedConditions.elementToBeClickable(finishButton));
+        try {
+            // 1. Try standard click
+            continueButton.click();
+        } catch (Exception e) {
+            // 2. Try JavaScript click
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", continueButton);
+        }
         
-        ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("arguments[0].click();", finishButton);
+        // 3. FORCE wait for the URL to change to Step 2 before returning
+        // This prevents the next assertion from running too early
+        wait.until(ExpectedConditions.urlContains("checkout-step-two.html"));
         return this;
     }
+
+    public CheckoutPage clickFinish() {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        wait.until(ExpectedConditions.elementToBeClickable(finishButton));
+        
+        // Use JS click for the final transition as well
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", finishButton);
+        
+        wait.until(ExpectedConditions.urlContains("checkout-complete.html"));
+        return this;
+    }
+
 
 
 
