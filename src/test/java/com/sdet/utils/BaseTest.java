@@ -151,6 +151,7 @@ public class BaseTest {
                     options.addArguments("--no-sandbox");
                     options.addArguments("--disable-dev-shm-usage");
                     options.addArguments("--window-size=1920,1080");
+                    options.addArguments("--ignore-certificate-errors"); 
                     System.out.println("[BaseTest] Running in HEADLESS mode (CI)");
                 }
                 options.addArguments("--disable-notifications");

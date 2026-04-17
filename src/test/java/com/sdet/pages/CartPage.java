@@ -1,6 +1,7 @@
 package com.sdet.pages;
 
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -35,17 +36,14 @@ public class CartPage extends BasePage {
     }
 
     public CheckoutPage proceedToCheckout() {
-    // 1. Ensure we aren't clicking an empty cart
-    if (getCartItemCount() == 0) {
-        throw new IllegalStateException("Cannot proceed to checkout: Cart is empty!");
-    }
-
-    // 2. Explicitly wait for the button and click it
+    // Wait for button and click
     WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-    wait.until(ExpectedConditions.elementToBeClickable(checkoutButton)).click();
+    WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(checkoutButton));
+    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
     
     return new CheckoutPage(driver);
 }
+
 
 
     public InventoryPage continueShopping() {

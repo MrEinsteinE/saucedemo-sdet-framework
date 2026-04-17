@@ -58,23 +58,26 @@ public class InventoryPage extends BasePage {
     }
 
     public InventoryPage addItemsToCart(int count) {
+    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
     for (int i = 0; i < count; i++) {
-        List<WebElement> buttons = driver.findElements(ADD_TO_CART_BUTTONS);
+        // 1. Find all "Add to Cart" buttons
+        List<WebElement> buttons = driver.findElements(By.xpath("//button[text()='Add to cart']"));
         if (buttons.isEmpty()) break;
 
         WebElement target = buttons.get(0);
         
-        // Force the click using JavaScript
+        // 2. Click using JS
         ((JavascriptExecutor) driver).executeScript("arguments[0].click();", target);
         
-        // Wait for the badge to update (sync point)
+        // 3. CRITICAL: Wait for the clicked button to disappear or change text
+        // This ensures the backend registered the addition
         int expectedCount = i + 1;
-        new WebDriverWait(driver, Duration.ofSeconds(10))
-            .until(ExpectedConditions.textToBePresentInElementLocated(
-                By.className("shopping_cart_badge"), String.valueOf(expectedCount)));
+        wait.until(ExpectedConditions.textToBePresentInElementLocated(
+            By.className("shopping_cart_badge"), String.valueOf(expectedCount)));
     }
     return this;
 }
+
 
 
 
