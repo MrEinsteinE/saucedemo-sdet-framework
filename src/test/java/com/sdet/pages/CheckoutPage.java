@@ -305,14 +305,14 @@ public class CheckoutPage extends BasePage {
     public CheckoutPage clickCancel() {
         String urlBeforeCancel = driver.getCurrentUrl();
 
+        // Use the By locator for a fresh element reference, then JS-click it.
+        // In headless Chrome, plain WebElement.click() on the Cancel button
+        // silently no-ops without throwing (the click is intercepted or lost),
+        // so a try/catch fallback never fires. JS click bypasses hit-testing
+        // and fires the React onClick handler directly.
         WebElement btn = new WebDriverWait(driver, Duration.ofSeconds(10))
-            .until(ExpectedConditions.elementToBeClickable(cancelButton));
-
-        try {
-            btn.click();
-        } catch (Exception ignored) {
-            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-        }
+            .until(ExpectedConditions.elementToBeClickable(By.id("cancel")));
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
 
         // Block until the URL actually changes (Cancel navigates away)
         new WebDriverWait(driver, Duration.ofSeconds(10))
