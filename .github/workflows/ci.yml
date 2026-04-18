@@ -16,10 +16,30 @@ on:
         required: false
         default: 'regression'
 
+# ─────────────────────────────────────────────────────────────
+# Grant GITHUB_TOKEN the permissions required by dorny/test-reporter.
+# Without `checks: write`, the action fails with:
+#   HttpError: Resource not accessible by integration
+# This is needed because new repos / fork PRs default to read-only tokens.
+# ─────────────────────────────────────────────────────────────
+permissions:
+  contents: read        # checkout
+  actions: read         # read workflow metadata
+  checks: write         # dorny/test-reporter creates Check Runs
+  pull-requests: write  # post test-result summaries on PRs (optional)
+
 jobs:
   test:
     name: Run Selenium TestNG Suite
     runs-on: ubuntu-latest
+
+    # Job-level permissions also required for dorny/test-reporter on PRs
+    # from forks where the workflow-level block alone isn't inherited.
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+      pull-requests: write
 
     steps:
       # ── 1. Checkout code ────────────────────────────────────────
@@ -79,10 +99,13 @@ jobs:
       # TestNG's JUnit-compatible reports live under junitreports/.
       - name: Publish TestNG Results
         uses: dorny/test-reporter@v1
-        if: always()
+        # Skip on fork PRs where GITHUB_TOKEN is always read-only
+        # (checks API cannot be reached even with permissions: checks: write).
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        continue-on-error: true   # don't fail the whole workflow if Checks API is unavailable
         with:
           name: TestNG Results
-          path: target/surefire-reports/junitreports/TEST-*.xml   # was: target/surefire-reports/*.xml
+          path: target/surefire-reports/junitreports/TEST-*.xml
           reporter: java-junit
           fail-on-error: false
           fail-on-empty: false
