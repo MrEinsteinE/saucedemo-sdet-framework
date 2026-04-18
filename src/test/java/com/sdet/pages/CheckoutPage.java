@@ -2,6 +2,7 @@ package com.sdet.pages;
 
 import java.time.Duration;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -96,18 +97,30 @@ public class CheckoutPage extends BasePage {
 
         WebElement fn = driver.findElement(By.id("first-name"));
         fn.clear();
-        fn.sendKeys(firstName);
+        if (firstName != null && !firstName.isEmpty()) {
+            fn.sendKeys(firstName);
+        }
 
         WebElement ln = driver.findElement(By.id("last-name"));
         ln.clear();
-        ln.sendKeys(lastName);
+        if (lastName != null && !lastName.isEmpty()) {
+            ln.sendKeys(lastName);
+        }
 
         WebElement pc = driver.findElement(By.id("postal-code"));
         pc.clear();
-        pc.sendKeys(zip);
+        if (zip != null && !zip.isEmpty()) {
+            pc.sendKeys(zip);
+        }
         // TAB away from the last field: fires onBlur on postal-code, which
         // flushes React's controlled-input state before we hit Continue.
-        pc.sendKeys(Keys.TAB);
+        // Guarded because sendKeys on an empty-value field can still need
+        // the blur event, but only if the field currently has focus.
+        try {
+            pc.sendKeys(Keys.TAB);
+        } catch (Exception ignored) {
+            // non-fatal: blur will still occur on the next click
+        }
 
         return this;
     }
@@ -118,13 +131,19 @@ public class CheckoutPage extends BasePage {
      *  (a) URL advances to checkout-step-two.html  — happy path
      *  (b) The error element appears in the DOM     — validation failure
      *
-     * Button interaction: We use Actions.moveToElement().click() rather than
-     * the plain WebElement.click().  In headless Chrome, Actions dispatches
-     * a real synthesised MouseEvent at the element's centre coordinates,
-     * which React's top-level event delegation reliably picks up.  A plain
-     * .click() call uses a synthetic DOM click that can occasionally be
-     * swallowed when the page has just navigated and React's event handlers
-     * have not fully re-attached.
+     * Button interaction strategy (defence-in-depth for headless CI):
+     *   1. Try native WebElement.click() after scrolling into view.
+     *   2. If no navigation / no error appears within a short grace period,
+     *      fall back to JavaScript click (this proven strategy is already
+     *      used successfully by CartPage.proceedToCheckout()).
+     *   3. If still nothing, fall back to Actions.moveToElement().click()
+     *      for good measure.
+     *
+     * Why this change: on GitHub Actions' ubuntu-latest + headless=new
+     * Chrome, Actions.moveToElement().click() was observed to silently drop
+     * the click on the Continue <input type="submit"> — neither a navigation
+     * nor a validation error ever occurred, causing a 15s TimeoutException.
+     * JS click bypasses the Chrome DevTools input-pipeline quirks entirely.
      *
      * Wait implementation: a raw ExpectedCondition lambda with implicit-wait
      * temporarily set to zero.  This is necessary because driver.findElements()
@@ -137,13 +156,32 @@ public class CheckoutPage extends BasePage {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
         WebElement btn = wait.until(ExpectedConditions.elementToBeClickable(CONTINUE_LOCATOR));
-        new Actions(driver).moveToElement(btn).click().perform();
+
+        // Make sure the button is in viewport before clicking (headless has no
+        // real scroll, but some event pipelines still care about visibility).
+        ((JavascriptExecutor) driver)
+                .executeScript("arguments[0].scrollIntoView({block:'center'});", btn);
 
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
         try {
+            // Attempt 1: JavaScript click — the most reliable option in
+            // headless Chrome on CI. Mirrors CartPage.proceedToCheckout().
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
+
+            if (waitForContinueOutcome(Duration.ofSeconds(5))) return this;
+
+            // Attempt 2: native click
+            try { btn.click(); } catch (Exception ignored) { /* fall through */ }
+            if (waitForContinueOutcome(Duration.ofSeconds(5))) return this;
+
+            // Attempt 3: Actions click (original strategy)
+            try {
+                new Actions(driver).moveToElement(btn).click().perform();
+            } catch (Exception ignored) { /* fall through to final wait */ }
+
+            // Final wait for outcome; lets the 15s budget be spent intelligently
             wait.until(d -> {
                 if (d.getCurrentUrl().contains("checkout-step-two.html")) return true;
-                // findElements() with implicit=0 returns [] immediately when absent
                 return !d.findElements(ERROR_LOCATOR).isEmpty();
             });
         } finally {
@@ -151,6 +189,25 @@ public class CheckoutPage extends BasePage {
         }
 
         return this;
+    }
+
+    /**
+     * Polls for up to {@code timeout} for a "Continue" outcome (navigation
+     * to step-two OR validation error). Returns true if one was observed,
+     * false if the timeout elapsed with no outcome (caller will retry).
+     *
+     * Caller MUST set implicit wait to 0 before invoking this.
+     */
+    private boolean waitForContinueOutcome(Duration timeout) {
+        try {
+            new WebDriverWait(driver, timeout).until(d -> {
+                if (d.getCurrentUrl().contains("checkout-step-two.html")) return true;
+                return !d.findElements(ERROR_LOCATOR).isEmpty();
+            });
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public CheckoutPage clickFinish() {

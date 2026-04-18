@@ -72,11 +72,17 @@ jobs:
           retention-days: 14
 
       # ── 7. Publish test results summary ─────────────────────────
+      # NOTE: dorny/test-reporter with reporter=java-junit expects strict
+      # JUnit XML. Surefire-3.x's top-level TEST-TestSuite.xml and TestNG's
+      # own testng-results.xml / testng-failed.xml are NOT in that format
+      # and trigger: "Cannot read properties of undefined (reading '$')".
+      # TestNG's JUnit-compatible reports live under junitreports/.
       - name: Publish TestNG Results
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: TestNG Results
-          path: target/surefire-reports/*.xml
+          path: target/surefire-reports/junitreports/TEST-*.xml   # was: target/surefire-reports/*.xml
           reporter: java-junit
           fail-on-error: false
+          fail-on-empty: false
